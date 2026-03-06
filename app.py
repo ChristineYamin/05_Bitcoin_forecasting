@@ -2,7 +2,7 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
-from stasmodels.tsa.arima.model import ARIMA
+from statsmodels.tsa.arima.model import ARIMA
 
 st.title("Bitcoin Price Forecast Dashboard")
 
@@ -11,6 +11,32 @@ st.write("This dashboard shows Bitcoin price trends and ARIMA forecasting.")
 # Load data
 df = pd.read_csv("C:/Projects/05_bitcoin_forecasting/data/btc_cleaned.csv", header=[0,1], index_col=0, parse_dates=True)
 df.columns = ["Close"]
+
+# Add a sidebar
+
+st.sidebar.header("Settings")
+
+years = st.sidebar.slider(
+    "Select number of years of data",
+    min_value=1,
+    max_value=5,
+    value=5
+)
+
+df = df.tail(years * 365)
+
+# Show Key Metrics
+st.subheader("Key Statistics")
+col1,col2, col3 = st.columns(3)
+col1.metric("Latest Price", f"${df["Close"].iloc[-1]:,.2f}")
+col2.metric("Mean Return", f"{returns.mean():.5f}")
+col3.metric("Volatility", f"{returns.std():.5f}")
+
+# Add a Data Table Viewer
+st.subheader("Raw Data")
+st.dataframe(df.tail(20))
+
+
 
 # Price chart
 st.subheader("Bitcoin Proce (5 Years)")
