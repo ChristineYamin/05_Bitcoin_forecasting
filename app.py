@@ -4,13 +4,22 @@ import numpy as np
 import matplotlib.pyplot as plt
 from statsmodels.tsa.arima.model import ARIMA
 
+# Page Config
+st.set_page_config(page_title="Bitcoin Forecast Dashboard", layout="wide")
 st.title("Bitcoin Price Forecast Dashboard")
-
 st.write("This dashboard shows Bitcoin price trends and ARIMA forecasting.")
 
 # Load data
-df = pd.read_csv("C:/Projects/05_bitcoin_forecasting/data/btc_cleaned.csv", header=[0,1], index_col=0, parse_dates=True)
-df.columns = ["Close"]
+@st.cache_data
+def load_data(csv_path: str) -> pd.DataFrame:
+    df = pd.read_csv(csv_path, header=[0, 1], index_col=0, parse_dates=True)
+    df.columns = ["Close"]
+    df = df.sort_index()
+    return df
+
+csv_path = "data/btc_cleaned.csv"
+df = load_data(csv_path)
+
 
 # Add a sidebar
 
@@ -23,62 +32,80 @@ years = st.sidebar.slider(
     value=5
 )
 
-df = df.tail(years * 365)
+# Approx filter (crypto trades daily; 365 is fine for dashboard)
+df_view = df.tail(years * 365).copy()
+
+
+# Compute Log returns
+returns = np.log(df_view["Close"] / df_view["Close"].shift(1)).dropna()
 
 # Show Key Metrics
 st.subheader("Key Statistics")
 col1,col2, col3 = st.columns(3)
-col1.metric("Latest Price", f"${df["Close"].iloc[-1]:,.2f}")
+col1.metric("Latest Price", f"${df_view['Close'].iloc[-1]:,.2f}")
 col2.metric("Mean Return", f"{returns.mean():.5f}")
 col3.metric("Volatility", f"{returns.std():.5f}")
 
 # Add a Data Table Viewer
-st.subheader("Raw Data")
-st.dataframe(df.tail(20))
+with st.expander("Show raw data (last 20 rows)"):
+    st.dataframe(df_view.tail(20))
 
 
 
 # Price chart
-st.subheader("Bitcoin Proce (5 Years)")
+st.subheader(f"Bitcoin Price (Last {years} Years)")
 
-fig, ax = plt.subplots()
-ax.plot(df.index, df["Close"])
+fig, ax = plt.subplots(figsize=(5,3))
+ax.plot(df_view.index, df_view["Close"])
 ax.set_title("Bitcoin Closing Price")
 ax.set_xlabel("Date")
 ax.set_ylabel("Price (USD)")
-st.pyplot(fig)
+ax.legend()
+col1, col2, col3 = st.columns([1,2,1])
+with col2:
+    st.pyplot(fig, use_container_width=False)
 
-# Compute Log returns
-returns = np.log(df["Close"]/df["Close"].shift(1))
-returns = returns.dropna()
 
-# Plot returns
+# Returns chart
 st.subheader("Daily Log Returns")
 
-fig2, ax2 = plt.subplots()
-ax2.plot(returns)
+fig2, ax2 = plt.subplots(figsize=(5,3))
+ax2.plot(returns.index, returns.values)
 ax2.set_title("Bitcoin Log Returns")
-st.pyplot(fig2)
+ax2.set_xlabel("Date")
+ax2.set_ylabel("Log return")
+ax2.legend()
+col1, col2, col3 = st.columns([1,2,1])
+with col2:
+    st.pyplot(fig2, use_container_width=False)
 
-# Train ARIMA
+# ARIMA modeling
+
+st.subheader("ARIMA Forecast vs Actual (Log Returns)")
+
 data = returns.values
 train_size = int(len(data) * 0.8)
 
-train = data [:train_size]
-test = data [train_size:]
+train = data[:train_size]
+test = data[train_size:]
 
-model = ARIMA(train, order=(1,0,1))
+# Use matching index for plotting
+test_index = returns.index[train_size:]
+
+model = ARIMA(train, order=(1, 0, 1))
 fit = model.fit()
 
 forecast = fit.forecast(steps=len(test))
 
-# Plot forecast
-st.subheader("ARIMA Forecast vs Actual")
-
-fig3, ax3 = plt.subplots()
-ax3.plot(test, label ="Actual")
-ax3.plot(forecast, label="Forecast")
+fig3, ax3 = plt.subplots(figsize=(5,3))
+ax3.plot(test_index, test, label="Actual", linewidth=1, alpha=0.7)
+ax3.plot(test_index, forecast, label="Forecast", linewidth=2)
+ax3.set_title("ARIMA Forecast vs Actual")
+ax3.set_xlabel("Date")
+ax3.set_ylabel("Log Return")
 ax3.legend()
-st.pyplot(fig3)
+col1, col2, col3 = st.columns([1,2,1])
+with col2:
+    st.pyplot(fig3, use_container_width=False)
 
-st.write("Forecast generated using ARIMA model.")
+st.caption("Note: Bitcoin returns are often close to random noise, so forecasts may stay near zero.")
